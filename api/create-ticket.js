@@ -139,9 +139,34 @@ function formatTicketBodyForFormType(formType, fields) {
     return html;
   }
   
-  // TODO: Add more formTypes as needed
-  // Example for future forms:
-  // if (formType === 'playspace-design') { ... }
+  // Playspace Design Service Form
+  if (formType === 'playspace-design') {
+    let html = `
+      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
+        <h2 style="color: #21808D;">Playspace Design Service Request</h2>
+        
+        <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
+        <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
+        <p><strong>Email:</strong> ${fields.email || ''}</p>
+        
+        <h3 style="color: #134252; margin-top: 20px;">Space Requirements</h3>
+        <p><strong>Type of Space:</strong> ${fields.space_type || fields.spaceType || ''}</p>
+        <p><strong>Budget Range:</strong> ${fields.budget || ''}</p>
+        <p><strong>Designed For:</strong> ${fields.designed_for || fields.designedFor || ''}</p>
+        <p><strong>Project Timeline:</strong> ${fields.timeline || ''}</p>
+    `;
+    
+    // Add notes if provided
+    if (fields.notes) {
+      html += `
+        <h3 style="color: #134252; margin-top: 20px;">Additional Notes</h3>
+        <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">${fields.notes}</div>
+      `;
+    }
+    
+    html += '</div>';
+    return html;
+  }
   
   // Default fallback for unknown form types
   return `
@@ -267,10 +292,19 @@ export default async function handler(req, res) {
       }
     }
 
-    // Extract name fields
-    const firstName = fields.firstName || fields.fullName?.split(' ')[0] || '';
-    const lastName = fields.lastName || fields.fullName?.split(' ').slice(1).join(' ') || '';
-    const fullName = fields.fullName || `${firstName} ${lastName}`.trim() || fields.email;
+    // Extract name fields (handle both forms)
+    const name = fields.name || fields.fullName || '';
+    const firstName = fields.firstName || name.split(' ')[0] || '';
+    const lastName = fields.lastName || name.split(' ').slice(1).join(' ') || '';
+    const fullName = name || `${firstName} ${lastName}`.trim() || fields.email;
+
+    // Dynamic subject based on form type
+    let subject = 'Form Inquiry';
+    if (fields.formType === 'b2b-form') {
+      subject = `B2B Inquiry - ${fields.companyName || fullName}`;
+    } else if (fields.formType === 'playspace-design') {
+      subject = `Playspace Design Request - ${fullName}`;
+    }
 
     // Create Gorgias ticket
     const ticketPayload = {
@@ -282,7 +316,7 @@ export default async function handler(req, res) {
         firstname: firstName,
         lastname: lastName
       },
-      subject: `${fields.formType === 'b2b-form' ? 'B2B' : 'Form'} Inquiry - ${fields.companyName || fullName}`,
+      subject: subject,
       messages: [
         {
           source: {
