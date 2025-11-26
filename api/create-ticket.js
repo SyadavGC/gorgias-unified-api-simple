@@ -177,15 +177,19 @@ function formatTicketBodyForFormType(formType, fields) {
   `;
 }
 
-async function uploadAttachmentToGorgias(apiUrl, apiUser, apiKey, file) {
-  // file structure from formidable: { filepath, originalFilename, mimetype }
+async function uploadAttachmentToGorgias(subdomain, apiUser, apiKey, file) {
+  // CRITICAL FIX: Use /upload?type=attachment endpoint (not /attachments)
+  // This matches the working submit-multi.js implementation
+  
   const formData = new FormData();
   formData.append('file', fs.createReadStream(file.filepath), {
     filename: file.originalFilename || file.newFilename,
     contentType: file.mimetype || 'application/octet-stream',
   });
   
-  const res = await fetch(`${apiUrl}/attachments`, {
+  const uploadUrl = `https://${subdomain}.gorgias.com/api/upload?type=attachment`;
+  
+  const res = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
       'Authorization': 'Basic ' + Buffer.from(apiUser + ':' + apiKey).toString('base64'),
@@ -200,11 +204,15 @@ async function uploadAttachmentToGorgias(apiUrl, apiUser, apiKey, file) {
   }
   
   const data = await res.json();
+  
+  // The /upload endpoint returns an array with one item
+  const fileData = Array.isArray(data) ? data[0] : data;
+  
   return {
-    url: data.url,
-    name: data.name || file.originalFilename,
-    size: data.size,
-    content_type: data.content_type
+    url: fileData.url,
+    name: fileData.name || file.originalFilename,
+    size: fileData.size,
+    content_type: fileData.content_type
   };
 }
 
@@ -279,11 +287,11 @@ export default async function handler(req, res) {
 
     console.log(`Found ${filesArr.length} file(s) to upload`);
 
-    // Upload all files to Gorgias
+    // Upload all files to Gorgias using CORRECT endpoint
     for (let file of filesArr) {
       try {
         console.log(`Uploading: ${file.originalFilename || file.newFilename}`);
-        const uploaded = await uploadAttachmentToGorgias(apiUrl, username, apiKey, file);
+        const uploaded = await uploadAttachmentToGorgias(subdomain, username, apiKey, file);
         uploadedFiles.push(uploaded);
         console.log(`✓ Uploaded: ${uploaded.name}`);
       } catch (err) {
