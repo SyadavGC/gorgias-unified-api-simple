@@ -1,0 +1,17 @@
+{
+  "name": "gorgias-unified-api-simple",
+  "version": "1.0.0",
+  "description": "Single-file unified Gorgias ticket API for multiple forms",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "formidable": "^3.5.1",
+    "node-fetch": "^3.3.2",
+    "form-data": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
