@@ -141,31 +141,40 @@ function formatTicketBodyForFormType(formType, fields) {
   
   // Playspace Design Service Form
   if (formType === 'playspace-design') {
-    let html = `
-      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
-        
-        <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
-        <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
-        <p><strong>Email:</strong> ${fields.email || ''}</p>
-        
-        <h3 style="color: #134252; margin-top: 20px;">Space Requirements</h3>
-        <p><strong>Type of Space:</strong> ${fields.space_type || fields.spaceType || ''}</p>
-        <p><strong>Budget Range:</strong> ${fields.budget || ''}</p>
-        <p><strong>Designed For:</strong> ${fields.designed_for || fields.designedFor || ''}</p>
-        <p><strong>Project Timeline:</strong> ${fields.timeline || ''}</p>
-    `;
-    
-    // Add notes if provided
-    if (fields.notes) {
-      html += `
-        <h3 style="color: #134252; margin-top: 20px;">Additional Notes</h3>
-        <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">${fields.notes}</div>
-      `;
+  // Helper function ONLY for role field
+  const formatRoleOther = (value) => {
+    if (!value) return '';
+    // If value starts with "Other –", prepend "role-other"
+    if (value.startsWith('Other –')) {
+      return value.replace('Other –', 'role-other –');
     }
-    
-    html += '</div>';
-    return html;
+    return value;
+  };
+
+  let html = `
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
+      <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
+      <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
+      <p><strong>Email:</strong> ${fields.email || ''}</p>
+      
+      <h3 style="color: #134252; margin-top: 20px;">Space Requirements</h3>
+      <p><strong>Type of Space:</strong> ${fields.space_type || fields.spaceType || ''}</p>
+      <p><strong>Budget Range:</strong> ${fields.budget || ''}</p>
+      <p><strong>Designed For:</strong> ${formatRoleOther(fields.designed_for || fields.designedFor || '')}</p>
+      <p><strong>Project Timeline:</strong> ${fields.timeline || ''}</p>
+  `;
+  
+  // Add notes if provided
+  if (fields.notes) {
+    html += `
+      <h3 style="color: #134252; margin-top: 20px;">Additional Notes</h3>
+      <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">${fields.notes}</div>
+    `;
   }
+  
+  html += '</div>';
+  return html;
+}
   
   // Default fallback for unknown form types
   return `
@@ -313,6 +322,16 @@ export default async function handler(req, res) {
       subject = `Playspace Design Service Request - ${fullName}`;
     }
 
+    let tags = [{ name: fields.formType }]; // Default tag
+if (fields.tags) {
+  try {
+    const parsedTags = JSON.parse(fields.tags);
+    tags = parsedTags.map(tag => ({ name: tag }));
+  } catch (e) {
+    console.warn('Failed to parse tags:', e.message);
+  }
+}
+
     // Create Gorgias ticket
     const ticketPayload = {
       channel: 'email',
@@ -338,7 +357,7 @@ export default async function handler(req, res) {
           public: true
         }
       ],
-      tags: [{ name: fields.formType }],
+      tags: tags,
       status: 'open'
     };
 
