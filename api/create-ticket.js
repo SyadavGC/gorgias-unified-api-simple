@@ -143,7 +143,6 @@ function formatTicketBodyForFormType(formType, fields) {
   if (formType === 'playspace-design') {
     let html = `
       <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
-        <h2 style="color: #21808D;">Playspace Design Service Request</h2>
         
         <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
         <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
@@ -311,7 +310,7 @@ export default async function handler(req, res) {
     if (fields.formType === 'b2b-form') {
       subject = `B2B Inquiry - ${fields.companyName || fullName}`;
     } else if (fields.formType === 'playspace-design') {
-      subject = `Playspace Design Request - ${fullName}`;
+      subject = `Playspace Design Service Request - ${fullName}`;
     }
 
     // Create Gorgias ticket
