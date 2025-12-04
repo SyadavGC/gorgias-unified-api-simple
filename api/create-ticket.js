@@ -340,11 +340,12 @@ export default async function handler(req, res) {
     let subject = 'Form Inquiry';
     if (fields.formType === 'b2b-form') {
       subject = `B2B Inquiry - ${fields.companyName || fullName}`;
-      if (fields.formType === 'contact-form') {
-      subject = `Customer Inquiry - ${fullName}`;
     } else if (fields.formType === 'playspace-design') {
       subject = `Playspace Design Service Request - ${fullName}`;
-    }
+    } else if (fields.formType === 'contact-form') {
+  subject = `Customer Inquiry - ${fullName}`;
+}
+    
 
     let tags = [{ name: fields.formType }]; // Default tag
 if (fields.tags) {
