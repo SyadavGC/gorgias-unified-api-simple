@@ -175,6 +175,28 @@ function formatTicketBodyForFormType(formType, fields) {
   html += '</div>';
   return html;
 }
+
+  // Contact Form
+if (formType === 'contact-form') {
+  let html = `
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
+      <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
+      <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
+      <p><strong>Email:</strong> ${fields.email || ''}</p>
+      <p><strong>Phone:</strong> ${fields.phone || ''}</p>
+      <p><strong>Fax:</strong> ${fields.fax || ''}</p>
+      <p><strong>State:</strong> ${fields.state || ''}</p>
+      <p><strong>Country:</strong> ${fields.country || ''}</p>
+      
+      <h3 style="color: #134252; margin-top: 20px;">Message</h3>
+      <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">
+        ${fields.notes || ''}
+      </div>
+    </div>
+  `;
+  return html;
+}
+
   
   // Default fallback for unknown form types
   return `
