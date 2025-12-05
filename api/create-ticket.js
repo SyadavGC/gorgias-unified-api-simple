@@ -44,7 +44,7 @@ const allowedFileTypes = process.env.ALLOWED_FILE_TYPES?.split(',') || [
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5MB default
 
 // Reserved fields that shouldn't appear in the ticket body
-const RESERVED_FIELDS = ['formType', 'tags', 'customSubject', 'Subject', 'fileFieldName'];
+const RESERVED_FIELDS = ['formType', 'tags', 'customSubject', 'subject', 'fileFieldName'];
 
 function sendCORS(res, req) {
   const origin = req.headers.origin;
