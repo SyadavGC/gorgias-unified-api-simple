@@ -1,15 +1,16 @@
 /**
  * /api/create-ticket.js
- * Unified Gorgias Ticket Creator for Vercel
- * Supports multiple forms (distinguished by "formType"), CORS, file uploads, robust errors.
+ * 100% FORM-AGNOSTIC Gorgias Ticket Creator
+ * Works with ANY form without modifications
  * 
  * Environment Variables Required:
  * - GORGIAS_SUBDOMAIN
  * - GORGIAS_USERNAME
  * - GORGIAS_API_KEY
- * - GORGIAS_API_URL
  * - GORGIAS_SUPPORT_EMAIL
- * - ALLOWED_ORIGIN (comma-separated, no spaces)
+ * - ALLOWED_ORIGIN (comma-separated)
+ * - ALLOWED_FILE_TYPES (optional, comma-separated MIME types, e.g., "image/jpeg,image/png,application/pdf")
+ * - MAX_FILE_SIZE (optional, in bytes, default: 5MB)
  */
 
 import formidable from 'formidable';
@@ -17,7 +18,6 @@ import fetch from 'node-fetch';
 import FormData from 'form-data';
 import fs from 'fs';
 
-// Disable default Next.js body parsing
 export const config = {
   api: { 
     bodyParser: false,
@@ -25,9 +25,26 @@ export const config = {
   },
 };
 
-const allowedOrigins = process.env.ALLOWED_ORIGIN
-  ? process.env.ALLOWED_ORIGIN.split(',')
-  : [];
+// Configuration
+const allowedOrigins = process.env.ALLOWED_ORIGIN?.split(',') || [];
+const allowedFileTypes = process.env.ALLOWED_FILE_TYPES?.split(',') || [
+  'image/jpeg',
+  'image/jpg', 
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv'
+];
+const maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5MB default
+
+// Reserved fields that shouldn't appear in the ticket body
+const RESERVED_FIELDS = ['formType', 'email', 'name', 'fullName', 'firstName', 'lastName', 'tags', 'fileFieldName'];
 
 function sendCORS(res, req) {
   const origin = req.headers.origin;
@@ -44,8 +61,24 @@ function parseMultipart(req) {
   return new Promise((resolve, reject) => {
     const form = formidable({ 
       multiples: true, 
-      maxFiles: 5, 
-      maxFileSize: 5 * 1024 * 1024 // 5MB per file
+      maxFiles: 20,
+      maxFileSize: maxFileSize,
+      // File type filter
+      filter: function({ name, originalFilename, mimetype }) {
+        console.log(`📎 File validation: ${originalFilename} (${mimetype})`);
+        
+        // Allow if no mimetype restriction is set
+        if (allowedFileTypes.length === 0) return true;
+        
+        // Check if mimetype is in allowed list
+        const isAllowed = mimetype && allowedFileTypes.includes(mimetype);
+        
+        if (!isAllowed) {
+          console.warn(`❌ File type rejected: ${mimetype} for ${originalFilename}`);
+        }
+        
+        return isAllowed;
+      }
     });
     
     form.parse(req, (err, fields, files) => {
@@ -65,152 +98,67 @@ function parseMultipart(req) {
   });
 }
 
-// Utility to format ticket body (can be extended per formType)
-function formatTicketBodyForFormType(formType, fields) {
-  if (formType === 'b2b-form') {
-    // Format for B2B form
-    let html = `
-      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
-        <h2 style="color: #21808D;">B2B Lead Form Submission</h2>
-        
-        <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
-        <p><strong>Full Name:</strong> ${fields.fullName || ''}</p>
-        <p><strong>Email:</strong> ${fields.email || ''}</p>
-        <p><strong>Phone:</strong> ${(fields.countryCode || '') + ' ' + (fields.phone || '')}</p>
-        
-        <h3 style="color: #134252; margin-top: 20px;">Business Information</h3>
-        <p><strong>Company:</strong> ${fields.companyName || ''}</p>
-        <p><strong>Tax ID:</strong> ${fields.taxId || ''}</p>
-        <p><strong>Organization Type:</strong> ${fields.organizationType || ''}</p>
-        <p><strong>Website:</strong> ${fields.website || ''}</p>
-        <p><strong>Inquiry Type:</strong> ${fields.inquiryType || ''}</p>
-        
-        <h3 style="color: #134252; margin-top: 20px;">Address</h3>
-        <p><strong>Street:</strong> ${fields.streetAddress || ''}</p>
-        <p><strong>City:</strong> ${fields.city || ''}</p>
-        <p><strong>State:</strong> ${fields.state || ''}</p>
-        <p><strong>Postal Code:</strong> ${fields.postalCode || ''}</p>
-    `;
-    
-    // Add conditional fields based on organization type
-    if (fields.organizationType === 'education') {
-      html += `
-        <h3 style="color: #134252; margin-top: 20px;">Education Details</h3>
-        <p><strong>Grade Levels:</strong> ${fields.gradeLevels || ''}</p>
-        <p><strong>Number of Students:</strong> ${fields.numStudents || ''}</p>
-      `;
-    }
-    
-    if (fields.organizationType === 'interior-design') {
-      html += `
-        <h3 style="color: #134252; margin-top: 20px;">Interior Design Details</h3>
-        <p><strong>Project Type:</strong> ${fields.projectType || ''}</p>
-        <p><strong>Budget Range:</strong> ${fields.budgetRange || ''}</p>
-        <p><strong>Playspace Design Service:</strong> ${fields.playspaceDesignId === 'yes' ? 'Yes' : 'No'}</p>
-      `;
-    }
-    
-    if (fields.organizationType === 'corporation') {
-      html += `
-        <h3 style="color: #134252; margin-top: 20px;">Corporation Details</h3>
-        <p><strong>Company Size:</strong> ${fields.companySize || ''}</p>
-        <p><strong>Industry:</strong> ${fields.industry || ''}</p>
-      `;
-    }
-    
-    if (fields.organizationType === 'hotel') {
-      html += `
-        <h3 style="color: #134252; margin-top: 20px;">Hotel Details</h3>
-        <p><strong>Hotel Type:</strong> ${fields.hotelType || ''}</p>
-        <p><strong>Number of Rooms:</strong> ${fields.numRooms || ''}</p>
-        <p><strong>Playspace Design Service:</strong> ${fields.playspaceDesignHotel === 'yes' ? 'Yes' : 'No'}</p>
-      `;
-    }
-    
-    // Add message
-    if (fields.message) {
-      html += `
-        <h3 style="color: #134252; margin-top: 20px;">Message</h3>
-        <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">${fields.message}</div>
-      `;
-    }
-    
-    html += '</div>';
-    return html;
-  }
-  
-  // Playspace Design Service Form
-  if (formType === 'playspace-design') {
-  // Helper function ONLY for role field
-  const formatRoleOther = (value) => {
-    if (!value) return '';
-    // If value starts with "Other –", prepend "role-other"
-    if (value.startsWith('Other –')) {
-      return value.replace('Other –', 'role-other –');
-    }
-    return value;
-  };
+/**
+ * Generic field formatter - converts field names to human-readable labels
+ * Examples: 
+ *   "firstName" → "First Name"
+ *   "company_name" → "Company Name"
+ *   "taxID" → "Tax ID"
+ */
+function formatFieldName(fieldName) {
+  return fieldName
+    // Insert space before capital letters: firstName → first Name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    // Replace underscores and hyphens with spaces
+    .replace(/[_-]/g, ' ')
+    // Capitalize first letter of each word
+    .replace(/\b\w/g, char => char.toUpperCase())
+    .trim();
+}
 
+/**
+ * Generate generic HTML body from ANY form fields
+ */
+function generateGenericTicketBody(formType, fields) {
   let html = `
     <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
-      <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
-      <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
-      <p><strong>Email:</strong> ${fields.email || ''}</p>
-      
-      <h3 style="color: #134252; margin-top: 20px;">Space Requirements</h3>
-      <p><strong>Type of Space:</strong> ${fields.space_type || fields.spaceType || ''}</p>
-      <p><strong>Budget Range:</strong> ${fields.budget || ''}</p>
-      <p><strong>Designed For:</strong> ${formatRoleOther(fields.designed_for || fields.designedFor || '')}</p>
-      <p><strong>Project Timeline:</strong> ${fields.timeline || ''}</p>
+      <h2 style="color: #21808D; margin-bottom: 20px;">Form Submission: ${formatFieldName(formType)}</h2>
   `;
   
-  // Add notes if provided
-  if (fields.notes) {
-    html += `
-      <h3 style="color: #134252; margin-top: 20px;">Additional Notes</h3>
-      <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">${fields.notes}</div>
-    `;
+  // Filter out reserved fields and empty values
+  const dataFields = Object.entries(fields).filter(([key, value]) => {
+    return !RESERVED_FIELDS.includes(key) && value && value.toString().trim() !== '';
+  });
+  
+  if (dataFields.length === 0) {
+    html += '<p style="color: #666;"><em>No additional data submitted</em></p>';
+  } else {
+    html += '<table style="width: 100%; border-collapse: collapse;">';
+    
+    for (const [key, value] of dataFields) {
+      const label = formatFieldName(key);
+      const displayValue = value.toString().trim();
+      
+      html += `
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 10px; font-weight: bold; color: #134252; width: 30%; vertical-align: top;">
+            ${label}
+          </td>
+          <td style="padding: 10px; color: #333; white-space: pre-wrap;">
+            ${displayValue}
+          </td>
+        </tr>
+      `;
+    }
+    
+    html += '</table>';
   }
   
   html += '</div>';
   return html;
 }
 
-  // Contact Form
-if (formType === 'contact-form') {
-  let html = `
-    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
-      <h3 style="color: #134252; margin-top: 20px;">Contact Information</h3>
-      <p><strong>Name:</strong> ${fields.name || fields.fullName || ''}</p>
-      <p><strong>Email:</strong> ${fields.email || ''}</p>
-      <p><strong>Phone:</strong> ${fields.phone || ''}</p>
-      <p><strong>Fax:</strong> ${fields.fax || ''}</p>
-      <p><strong>State:</strong> ${fields.state || ''}</p>
-      <p><strong>Country:</strong> ${fields.country || ''}</p>
-      
-      <h3 style="color: #134252; margin-top: 20px;">Message</h3>
-      <div style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">
-        ${fields.notes || ''}
-      </div>
-    </div>
-  `;
-  return html;
-}
-
-  
-  // Default fallback for unknown form types
-  return `
-    <div style="font-family: Arial, sans-serif;">
-      <h2>Form Submission - ${formType}</h2>
-      <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">${JSON.stringify(fields, null, 2)}</pre>
-    </div>
-  `;
-}
-
 async function uploadAttachmentToGorgias(subdomain, apiUser, apiKey, file) {
-  // CRITICAL FIX: Use /upload?type=attachment endpoint (not /attachments)
-  // This matches the working submit-multi.js implementation
-  
   const formData = new FormData();
   formData.append('file', fs.createReadStream(file.filepath), {
     filename: file.originalFilename || file.newFilename,
@@ -234,8 +182,6 @@ async function uploadAttachmentToGorgias(subdomain, apiUser, apiKey, file) {
   }
   
   const data = await res.json();
-  
-  // The /upload endpoint returns an array with one item
   const fileData = Array.isArray(data) ? data[0] : data;
   
   return {
@@ -247,117 +193,102 @@ async function uploadAttachmentToGorgias(subdomain, apiUser, apiKey, file) {
 }
 
 export default async function handler(req, res) {
-  // Always send CORS headers
   sendCORS(res, req);
 
-  // Handle OPTIONS preflight
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
   }
 
-  // Only POST allowed
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
 
   try {
-    console.log('=== Unified Gorgias API Request Started ===');
-    console.log('Origin:', req.headers.origin);
-    console.log('Content-Type:', req.headers['content-type']);
-
-    // Parse form fields and files
+    console.log('=== Generic Form-to-Gorgias Handler ===');
+    console.log('Allowed file types:', allowedFileTypes.join(', '));
+    
+    // Parse incoming data
     const { fields, files } = await parseMultipart(req);
-    console.log('✓ Parsed fields:', Object.keys(fields));
-    console.log('✓ Parsed files:', Object.keys(files));
+    console.log('✓ Parsed fields:', Object.keys(fields).join(', '));
+    console.log('✓ Parsed files:', Object.keys(files).join(', '));
 
-    // Get environment variables
+    // Validate credentials
     const subdomain = process.env.GORGIAS_SUBDOMAIN;
     const username = process.env.GORGIAS_USERNAME;
     const apiKey = process.env.GORGIAS_API_KEY;
-    const apiUrl = process.env.GORGIAS_API_URL || `https://${subdomain}.gorgias.com/api`;
+    const apiUrl = `https://${subdomain}.gorgias.com/api`;
     const supportEmail = process.env.GORGIAS_SUPPORT_EMAIL || 'support@example.com';
 
-    // Validate environment variables
     if (!subdomain || !username || !apiKey) {
-      console.error('❌ Missing Gorgias credentials in environment variables');
-      return res.status(500).json({ 
-        error: 'Server configuration error',
-        details: 'Missing Gorgias API credentials'
-      });
+      throw new Error('Missing Gorgias API credentials');
     }
 
     // Validate required fields
-    if (!fields.formType) {
-      console.error('❌ Missing formType');
-      return res.status(400).json({ error: 'Missing formType field' });
-    }
-    
-    if (!fields.email) {
-      console.error('❌ Missing email');
-      return res.status(400).json({ error: 'Missing email field' });
+    if (!fields.formType || !fields.email) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['formType', 'email']
+      });
     }
 
-    console.log('✓ FormType:', fields.formType);
-    console.log('✓ Email:', fields.email);
+    console.log('✓ Form Type:', fields.formType);
+    console.log('✓ Customer Email:', fields.email);
 
-    // Compose ticket body
-    const ticketBodyHtml = formatTicketBodyForFormType(fields.formType, fields);
+    // Generate generic ticket body
+    const ticketBodyHtml = generateGenericTicketBody(fields.formType, fields);
     
-    // Prepare files for upload
+    // Upload ALL files from ANY field
     let uploadedFiles = [];
-    let filesArr = [];
+    const rejectedFiles = [];
     
-    if (files.companyDocuments) {
-      filesArr = Array.isArray(files.companyDocuments) 
-        ? files.companyDocuments 
-        : [files.companyDocuments];
-    }
-
-    console.log(`Found ${filesArr.length} file(s) to upload`);
-
-    // Upload all files to Gorgias using CORRECT endpoint
-    for (let file of filesArr) {
-      try {
-        console.log(`Uploading: ${file.originalFilename || file.newFilename}`);
-        const uploaded = await uploadAttachmentToGorgias(subdomain, username, apiKey, file);
-        uploadedFiles.push(uploaded);
-        console.log(`✓ Uploaded: ${uploaded.name}`);
-      } catch (err) {
-        console.error(`❌ Failed to upload ${file.originalFilename}:`, err.message);
-        // Continue with other files instead of failing completely
+    for (const [fieldName, fileOrFiles] of Object.entries(files)) {
+      const filesArray = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+      
+      for (const file of filesArray) {
+        try {
+          console.log(`📤 Uploading: ${file.originalFilename} from field "${fieldName}"`);
+          const uploaded = await uploadAttachmentToGorgias(subdomain, username, apiKey, file);
+          uploadedFiles.push(uploaded);
+          console.log(`✅ Uploaded: ${uploaded.name}`);
+        } catch (err) {
+          console.error(`❌ Upload failed for ${file.originalFilename}:`, err.message);
+          rejectedFiles.push({
+            filename: file.originalFilename,
+            reason: err.message
+          });
+        }
       }
     }
 
-    // Extract name fields (handle both forms)
-    const name = fields.name || fields.fullName || '';
+    // Extract customer name (flexible)
+    const name = fields.name || fields.fullName || fields.firstName || '';
     const firstName = fields.firstName || name.split(' ')[0] || '';
     const lastName = fields.lastName || name.split(' ').slice(1).join(' ') || '';
-    const fullName = name || `${firstName} ${lastName}`.trim() || fields.email;
+    const fullName = name || `${firstName} ${lastName}`.trim() || fields.email.split('@')[0];
 
-    // Dynamic subject based on form type
-    let subject = 'Form Inquiry';
-    if (fields.formType === 'b2b-form') {
-      subject = `B2B Inquiry - ${fields.companyName || fullName}`;
-    } else if (fields.formType === 'playspace-design') {
-      subject = `Playspace Design Service Request - ${fullName}`;
-    } else if (fields.formType === 'contact-form') {
-  subject = `Customer Inquiry - ${fullName}`;
-}
-    
+    // Generate subject
+    const subject = `${formatFieldName(fields.formType)} - ${fullName}`;
 
-    let tags = [{ name: fields.formType }]; // Default tag
-if (fields.tags) {
-  try {
-    const parsedTags = JSON.parse(fields.tags);
-    tags = parsedTags.map(tag => ({ name: tag }));
-  } catch (e) {
-    console.warn('Failed to parse tags:', e.message);
-  }
-}
+    // Parse tags (support JSON array or comma-separated)
+    let tags = [{ name: fields.formType }];
+    if (fields.tags) {
+      try {
+        const parsedTags = JSON.parse(fields.tags);
+        tags = Array.isArray(parsedTags) 
+          ? parsedTags.map(tag => ({ name: tag }))
+          : [{ name: fields.formType }];
+      } catch (e) {
+        // Try comma-separated
+        const tagList = fields.tags.split(',').map(t => t.trim()).filter(t => t);
+        if (tagList.length > 0) {
+          tags = tagList.map(tag => ({ name: tag }));
+        }
+      }
+    }
 
-    // Create Gorgias ticket
+    // Build ticket payload
     const ticketPayload = {
       channel: 'email',
       via: 'api',
@@ -386,19 +317,14 @@ if (fields.tags) {
       status: 'open'
     };
 
-    // Add attachments if any were uploaded
+    // Add attachments if any
     if (uploadedFiles.length > 0) {
-      ticketPayload.messages[0].attachments = uploadedFiles.map(file => ({
-        url: file.url,
-        name: file.name,
-        size: file.size,
-        content_type: file.content_type
-      }));
-      console.log(`✓ Added ${uploadedFiles.length} attachment(s) to ticket`);
+      ticketPayload.messages[0].attachments = uploadedFiles;
+      console.log(`✓ Attached ${uploadedFiles.length} file(s)`);
     }
 
+    // Create ticket
     console.log('Creating Gorgias ticket...');
-
     const resp = await fetch(`${apiUrl}/tickets`, {
       method: 'POST',
       headers: {
@@ -419,14 +345,16 @@ if (fields.tags) {
     }
 
     const ticketData = await resp.json();
-    console.log(`✅ Ticket created: #${ticketData.id}`);
-    console.log('=== Request completed successfully ===\n');
+    console.log(`✅ Ticket #${ticketData.id} created successfully`);
+    console.log('=== Request completed ===\n');
 
     res.status(200).json({ 
       success: true, 
       ticketId: ticketData.id, 
       ticketUrl: ticketData.uri || `https://${subdomain}.gorgias.com/app/ticket/${ticketData.id}`,
-      filesUploaded: uploadedFiles.length
+      filesUploaded: uploadedFiles.length,
+      filesRejected: rejectedFiles.length,
+      rejectedFiles: rejectedFiles
     });
 
   } catch (error) {
