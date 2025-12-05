@@ -121,8 +121,7 @@ function formatFieldName(fieldName) {
  */
 function generateGenericTicketBody(formType, fields) {
   let html = `
-    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
-      <h2 style="color: #21808D; margin-bottom: 20px;">Form Submission: ${formatFieldName(formType)}</h2>
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 800px;">
   `;
   
   // Filter out reserved fields and empty values
@@ -131,27 +130,34 @@ function generateGenericTicketBody(formType, fields) {
   });
   
   if (dataFields.length === 0) {
-    html += '<p style="color: #666;"><em>No additional data submitted</em></p>';
+    html += '<p style="color: #999; font-style: italic;">No additional data submitted</p>';
   } else {
-    html += '<table style="width: 100%; border-collapse: collapse;">';
-    
+    // Use clean definition list layout instead of table
     for (const [key, value] of dataFields) {
       const label = formatFieldName(key);
       const displayValue = value.toString().trim();
       
-      html += `
-        <tr style="border-bottom: 1px solid #eee;">
-          <td style="padding: 10px; font-weight: bold; color: #134252; width: 30%; vertical-align: top;">
-            ${label}
-          </td>
-          <td style="padding: 10px; color: #333; white-space: pre-wrap;">
-            ${displayValue}
-          </td>
-        </tr>
-      `;
+      // Check if it's a long text field (like message/notes)
+      const isLongText = displayValue.length > 100 || displayValue.includes('\n');
+      
+      if (isLongText) {
+        // Full-width formatting for long text
+        html += `
+          <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-left: 3px solid #21808D; border-radius: 4px;">
+            <strong style="display: block; color: #134252; margin-bottom: 8px; font-size: 15px;">${label}</strong>
+            <div style="color: #333; white-space: pre-wrap; line-height: 1.5;">${displayValue}</div>
+          </div>
+        `;
+      } else {
+        // Compact formatting for short fields
+        html += `
+          <div style="margin: 12px 0; padding: 10px 0; border-bottom: 1px solid #e9ecef;">
+            <strong style="color: #134252; display: inline-block; min-width: 140px;">${label}:</strong>
+            <span style="color: #333;">${displayValue}</span>
+          </div>
+        `;
+      }
     }
-    
-    html += '</table>';
   }
   
   html += '</div>';
