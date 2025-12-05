@@ -268,8 +268,10 @@ export default async function handler(req, res) {
     const lastName = fields.lastName || name.split(' ').slice(1).join(' ') || '';
     const fullName = name || `${firstName} ${lastName}`.trim() || fields.email.split('@')[0];
 
-    // Generate subject
-    const subject = `${formatFieldName(fields.formType)} - ${fullName}`;
+    
+    // Generate subject - use custom subject if provided, otherwise auto-generate
+    const subject = fields.subject || fields.customSubject || `${formatFieldName(fields.formType)} - ${fullName}`;
+
 
     // Parse tags (support JSON array or comma-separated)
     let tags = [{ name: fields.formType }];
