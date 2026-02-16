@@ -122,11 +122,7 @@ function parseMultipart(req) {
       maxFileSize: maxFileSize,
       filter: function({ originalFilename, mimetype }) {
         if (allowedFileTypes.length === 0) return true;
-        const isAllowed = mimetype && allowedFileTypes.includes(mimetype);
-        if (!isAllowed) {
-          console.log('[create-ticket] File type rejected:', mimetype);
-        }
-        return isAllowed;
+        return mimetype && allowedFileTypes.includes(mimetype);
       }
     });
 
@@ -282,14 +278,10 @@ export default async function handler(req, res) {
   let files = null;
 
   try {
-    console.log('[create-ticket] Processing request');
-
     // Parse incoming data
     const parsed = await parseMultipart(req);
     const { fields } = parsed;
     files = parsed.files;
-
-    console.log('[create-ticket] Form type:', fields.formType);
 
     // ── Validate credentials ──
     const subdomain = process.env.GORGIAS_SUBDOMAIN;
@@ -363,7 +355,6 @@ export default async function handler(req, res) {
 
       for (const file of filesArray) {
         try {
-          console.log('[create-ticket] Uploading file from field:', fieldName);
           const uploaded = await uploadAttachmentToGorgias(subdomain, username, apiKey, file);
           uploadedFiles.push(uploaded);
         } catch (err) {
@@ -436,7 +427,6 @@ export default async function handler(req, res) {
     }
 
     // ── Create ticket ──
-    console.log('[create-ticket] Creating Gorgias ticket');
     const resp = await fetch(`${apiUrl}/tickets`, {
       method: 'POST',
       headers: {
@@ -453,7 +443,6 @@ export default async function handler(req, res) {
     }
 
     const ticketData = await resp.json();
-    console.log('[create-ticket] Ticket created:', ticketData.id);
 
     res.status(200).json({
       success: true,
