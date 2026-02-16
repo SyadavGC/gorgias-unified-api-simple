@@ -62,6 +62,13 @@ const maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5
 // Allowed form types — must match exactly what each frontend sends
 const ALLOWED_FORM_TYPES = ['b2b-form', 'contact-form', 'Playspace Design'];
 
+// Per-form Gorgias integration routing (controls "From" email on agent replies)
+const INTEGRATION_MAP = {
+  'b2b-form': process.env.GORGIAS_INTEGRATION_B2B || null,
+  'contact-form': process.env.GORGIAS_INTEGRATION_CONTACT || null,
+  'Playspace Design': process.env.GORGIAS_INTEGRATION_DESIGN || null,
+};
+
 // Reserved fields that shouldn't appear in the ticket body
 const RESERVED_FIELDS = ['formType', 'tags', 'customSubject', 'subject', 'fileFieldName', 'turnstileToken'];
 
@@ -414,7 +421,10 @@ export default async function handler(req, res) {
           channel: 'email',
           from_agent: false,
           via: 'api',
-          public: true
+          public: true,
+          ...(INTEGRATION_MAP[fields.formType]
+            ? { integration_id: parseInt(INTEGRATION_MAP[fields.formType]) }
+            : {})
         }
       ],
       tags: tags,
