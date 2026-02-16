@@ -63,10 +63,20 @@ const maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5
 const ALLOWED_FORM_TYPES = ['b2b-form', 'contact-form', 'Playspace Design'];
 
 // Per-form Gorgias integration routing (controls "From" email on agent replies)
+// Each form can have its own integration ID + email address
 const INTEGRATION_MAP = {
-  'b2b-form': process.env.GORGIAS_INTEGRATION_B2B || null,
-  'contact-form': process.env.GORGIAS_INTEGRATION_CONTACT || null,
-  'Playspace Design': process.env.GORGIAS_INTEGRATION_DESIGN || null,
+  'b2b-form': {
+    id: process.env.GORGIAS_INTEGRATION_B2B || null,
+    email: process.env.GORGIAS_EMAIL_B2B || null,
+  },
+  'contact-form': {
+    id: process.env.GORGIAS_INTEGRATION_CONTACT || null,
+    email: process.env.GORGIAS_EMAIL_CONTACT || null,
+  },
+  'Playspace Design': {
+    id: process.env.GORGIAS_INTEGRATION_DESIGN || null,
+    email: process.env.GORGIAS_EMAIL_DESIGN || null,
+  },
 };
 
 // Reserved fields that shouldn't appear in the ticket body
@@ -414,7 +424,7 @@ export default async function handler(req, res) {
         {
           source: {
             type: 'email',
-            to: [{ address: supportEmail }],
+            to: [{ address: (INTEGRATION_MAP[fields.formType]?.email) || supportEmail }],
             from: { address: fields.email, name: fullName }
           },
           body_html: ticketBodyHtml,
@@ -422,8 +432,8 @@ export default async function handler(req, res) {
           from_agent: false,
           via: 'api',
           public: true,
-          ...(INTEGRATION_MAP[fields.formType]
-            ? { integration_id: parseInt(INTEGRATION_MAP[fields.formType]) }
+          ...(INTEGRATION_MAP[fields.formType]?.id
+            ? { integration_id: parseInt(INTEGRATION_MAP[fields.formType].id) }
             : {})
         }
       ],
